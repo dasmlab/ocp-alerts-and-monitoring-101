@@ -105,6 +105,25 @@ scrape_configs:
     scrape_interval: 30s
     scrape_timeout: 10s
 
+  # ----------------------------
+  # 2. User Workload Metrics (UWM)
+  # ----------------------------
+  - job_name: 'ocp-userworkload-federate'
+    honor_labels: true
+    metrics_path: /federate
+    scheme: https
+    tls_config:
+      insecure_skip_verify: true
+    bearer_token_file: /etc/prometheus/secrets/ocp-federate.token   # can reuse same token
+    params:
+      'match[]':
+        - '{__name__="up"}'
+        - '{__name__=~"ALERTS|ALERTS_FOR_STATE"}'
+        - '{job!~"prometheus.*|thanos.*"}'
+        - '{namespace!~"openshift-.*"}'
+    static_configs:
+      - targets: ['user-workload-federate-openshift-user-workload-monitoring.apps.ocp-ai-sno.rh.dasmlab.org']
+
   # Prometheus self-monitoring
   - job_name: 'prometheus'
     static_configs:

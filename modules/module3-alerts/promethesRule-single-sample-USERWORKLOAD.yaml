@@ -1,0 +1,21 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: custom-uwm-alerts
+  namespace: my-app          # <-- your project/namespace
+  labels:
+    prometheus: user-workload
+    role: alert-rules
+spec:
+  groups:
+  - name: custom.uwm.rules
+    rules:
+    - alert: HighCPUUsageUWM
+      expr: rate(container_cpu_usage_seconds_total[5m]) * 100 > 80
+      for: 0m
+      labels:
+        severity: warning
+      annotations:
+        summary: "High CPU usage (UWM)"
+        description: "Workload {{ $labels.pod }} in {{ $labels.namespace }} has high CPU"
+
