@@ -1,0 +1,308 @@
+# Example Prometheus Alert Rules for OCP Cluster
+# These rules demonstrate common alerting scenarios for OpenShift Container Platform
+
+groups:
+# =============================================================================
+# CLUSTER HEALTH ALERTS
+# =============================================================================
+- name: cluster-health
+  rules:
+  - alert: NodeNotReady
+    expr: kube_node_status_condition{condition="Ready",status="false"} == 1
+    for: 5m
+    labels:
+      severity: critical
+      component: node
+      team: platform
+    annotations:
+      summary: "Node {{ $labels.node }} is not ready"
+      description: "Node {{ $labels.node }} has been in NotReady state for more than 5 minutes. This may indicate hardware issues, network problems, or kubelet failures."
+      runbook_url: "https://wiki.company.com/runbooks/node-not-ready"
+
+  - alert: NodeDiskSpaceLow
+    expr: (node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"}) * 100 < 10
+    for: 5m
+    labels:
+      severity: critical
+      component: node
+      team: platform
+    annotations:
+      summary: "Node {{ $labels.instance }} disk space is low"
+      description: "Node {{ $labels.instance }} has less than 10% disk space available on root filesystem."
+
+  - alert: NodeMemoryPressure
+    expr: (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100 > 85
+    for: 10m
+    labels:
+      severity: critical
+      component: node
+      team: platform
+    annotations:
+      summary: "High memory usage on node {{ $labels.instance }}"
+      description: "Node {{ $labels.instance }} has memory usage above 85% for more than 10 minutes."
+
+  - alert: HighNodeCPUUsage
+    expr: 100 - (avg by (instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 80
+    for: 10m
+    labels:
+      severity: warning
+      component: node
+      team: platform
+    annotations:
+      summary: "High CPU usage on node {{ $labels.instance }}"
+      description: "Node {{ $labels.instance }} has CPU usage above 80% for more than 10 minutes."
+
+# =============================================================================
+# POD HEALTH ALERTS
+# =============================================================================
+- name: pod-health
+  rules:
+  - alert: PodCrashLooping
+    expr: rate(kube_pod_container_status_restarts_total[15m]) > 0
+    for: 5m
+    labels:
+      severity: warning
+      component: pod
+      team: platform
+    annotations:
+      summary: "Pod {{ $labels.pod }} is crash looping"
+      description: "Pod {{ $labels.pod }} in namespace {{ $labels.namespace }} is restarting frequently. Check pod logs for errors."
+
+  - alert: PodNotReady
+    expr: kube_pod_status_phase{phase="Pending"} > 0
+    for: 10m
+    labels:
+      severity: warning
+      component: pod
+      team: platform
+    annotations:
+      summary: "Pod {{ $labels.pod }} is stuck in Pending state"
+      description: "Pod {{ $labels.pod }} in namespace {{ $labels.namespace }} has been in Pending state for more than 10 minutes. Check resource availability and scheduling constraints."
+
+  - alert: PodFailed
+    expr: kube_pod_status_phase{phase="Failed"} > 0
+    for: 0m
+    labels:
+      severity: critical
+      component: pod
+      team: platform
+    annotations:
+      summary: "Pod {{ $labels.pod }} has failed"
+      description: "Pod {{ $labels.pod }} in namespace {{ $labels.namespace }} is in Failed state. Check pod logs and events for failure reasons."
+
+# =============================================================================
+# RESOURCE UTILIZATION ALERTS
+# =============================================================================
+- name: resource-utilization
+  rules:
+  - alert: HighMemoryUsage
+    expr: (container_memory_usage_bytes / container_spec_memory_limit_bytes) * 100 > 90
+    for: 5m
+    labels:
+      severity: warning
+      component: memory
+      team: platform
+    annotations:
+      summary: "High memory usage in container {{ $labels.container }}"
+      description: "Container {{ $labels.container }} in pod {{ $labels.pod }} is using more than 90% of its memory limit."
+
+  - alert: HighCPUUsage
+    expr: rate(container_cpu_usage_seconds_total[5m]) * 100 > 80
+    for: 10m
+    labels:
+      severity: warning
+      component: cpu
+      team: platform
+    annotations:
+      summary: "High CPU usage in container {{ $labels.container }}"
+      description: "Container {{ $labels.container }} in pod {{ $labels.pod }} has CPU usage above 80% for more than 10 minutes."
+
+  - alert: ContainerOOMKilled
+    expr: increase(container_oom_events_total[1h]) > 0
+    for: 0m
+    labels:
+      severity: critical
+      component: memory
+      team: platform
+    annotations:
+      summary: "Container {{ $labels.container }} was OOM killed"
+      description: "Container {{ $labels.container }} in pod {{ $labels.pod }} was killed due to out of memory conditions."
+
+# =============================================================================
+# DEPLOYMENT AND WORKLOAD ALERTS
+# =============================================================================
+- name: workload-health
+  rules:
+  - alert: DeploymentReplicasMismatch
+    expr: kube_deployment_status_replicas_available != kube_deployment_spec_replicas
+    for: 5m
+    labels:
+      severity: warning
+      component: deployment
+      team: platform
+    annotations:
+      summary: "Deployment {{ $labels.deployment }} replicas mismatch"
+      description: "Deployment {{ $labels.deployment }} in namespace {{ $labels.namespace }} has {{ $value }} available replicas but expects {{ $labels.replicas }}."
+
+  - alert: StatefulSetReplicasMismatch
+    expr: kube_statefulset_status_replicas_ready != kube_statefulset_spec_replicas
+    for: 5m
+    labels:
+      severity: warning
+      component: statefulset
+      team: platform
+    annotations:
+      summary: "StatefulSet {{ $labels.statefulset }} replicas mismatch"
+      description: "StatefulSet {{ $labels.statefulset }} in namespace {{ $labels.namespace }} has {{ $value }} ready replicas but expects {{ $labels.replicas }}."
+
+  - alert: DaemonSetNotReady
+    expr: kube_daemonset_status_number_ready != kube_daemonset_status_desired_number_scheduled
+    for: 10m
+    labels:
+      severity: warning
+      component: daemonset
+      team: platform
+    annotations:
+      summary: "DaemonSet {{ $labels.daemonset }} not ready on all nodes"
+      description: "DaemonSet {{ $labels.daemonset }} in namespace {{ $labels.namespace }} is not ready on all nodes. {{ $value }} pods are ready out of {{ $labels.desired }} desired."
+
+# =============================================================================
+# APPLICATION METRICS ALERTS
+# =============================================================================
+- name: application-metrics
+  rules:
+  - alert: HighErrorRate
+    expr: rate(http_requests_total{status=~"5.."}[5m]) / rate(http_requests_total[5m]) * 100 > 5
+    for: 5m
+    labels:
+      severity: critical
+      component: application
+      team: backend
+    annotations:
+      summary: "High error rate for {{ $labels.job }}"
+      description: "Error rate for {{ $labels.job }} is above 5% for more than 5 minutes. Current error rate: {{ $value }}%"
+
+  - alert: HighResponseTime
+    expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m])) > 1
+    for: 5m
+    labels:
+      severity: warning
+      component: application
+      team: backend
+    annotations:
+      summary: "High response time for {{ $labels.job }}"
+      description: "95th percentile response time for {{ $labels.job }} is above 1 second for more than 5 minutes. Current response time: {{ $value }}s"
+
+  - alert: LowRequestRate
+    expr: rate(http_requests_total[5m]) < 0.1
+    for: 10m
+    labels:
+      severity: warning
+      component: application
+      team: backend
+    annotations:
+      summary: "Low request rate for {{ $labels.job }}"
+      description: "Request rate for {{ $labels.job }} is below 0.1 requests per second for more than 10 minutes. This may indicate application issues or traffic problems."
+
+# =============================================================================
+# GO APPLICATION METRICS ALERTS
+# =============================================================================
+- name: go-application-metrics
+  rules:
+  - alert: HighGoroutineCount
+    expr: go_goroutines > 1000
+    for: 5m
+    labels:
+      severity: warning
+      component: application
+      team: backend
+    annotations:
+      summary: "High goroutine count for {{ $labels.job }}"
+      description: "Application {{ $labels.job }} has {{ $value }} goroutines, which is above the threshold of 1000."
+
+  - alert: HighMemoryAllocation
+    expr: go_memstats_alloc_bytes > 1000000000  # 1GB
+    for: 5m
+    labels:
+      severity: warning
+      component: application
+      team: backend
+    annotations:
+      summary: "High memory allocation for {{ $labels.job }}"
+      description: "Application {{ $labels.job }} has allocated {{ $value }} bytes of memory, which is above 1GB."
+
+  - alert: HighGCPauseTime
+    expr: rate(go_gc_duration_seconds_sum[5m]) > 0.1
+    for: 5m
+    labels:
+      severity: warning
+      component: application
+      team: backend
+    annotations:
+      summary: "High GC pause time for {{ $labels.job }}"
+      description: "Application {{ $labels.job }} has high garbage collection pause time: {{ $value }}s per second."
+
+# =============================================================================
+# CONNECTIVITY AND TARGET ALERTS
+# =============================================================================
+- name: connectivity
+  rules:
+  - alert: PrometheusTargetDown
+    expr: up == 0
+    for: 1m
+    labels:
+      severity: critical
+      component: prometheus
+      team: platform
+    annotations:
+      summary: "Prometheus target {{ $labels.instance }} is down"
+      description: "Prometheus target {{ $labels.instance }} for job {{ $labels.job }} has been down for more than 1 minute."
+
+  - alert: OCPClusterUnreachable
+    expr: up{job=~"ocp-cluster.*"} == 0
+    for: 2m
+    labels:
+      severity: critical
+      component: ocp
+      team: platform
+    annotations:
+      summary: "OCP cluster is unreachable"
+      description: "Cannot reach OCP cluster via job {{ $labels.job }}. Check network connectivity and authentication."
+
+# =============================================================================
+# OPENSHIFT-SPECIFIC ALERTS
+# =============================================================================
+- name: openshift-specific
+  rules:
+  - alert: RouteDown
+    expr: route_availability == 0
+    for: 5m
+    labels:
+      severity: critical
+      component: route
+      team: platform
+    annotations:
+      summary: "Route {{ $labels.route }} is down"
+      description: "Route {{ $labels.route }} in namespace {{ $labels.namespace }} is not available."
+
+  - alert: BuildFailed
+    expr: openshift_build_status{status="Failed"} == 1
+    for: 0m
+    labels:
+      severity: warning
+      component: build
+      team: platform
+    annotations:
+      summary: "Build {{ $labels.build }} failed"
+      description: "Build {{ $labels.build }} in namespace {{ $labels.namespace }} has failed. Check build logs for details."
+
+  - alert: LongRunningBuild
+    expr: openshift_build_duration_seconds > 1800  # 30 minutes
+    for: 0m
+    labels:
+      severity: warning
+      component: build
+      team: platform
+    annotations:
+      summary: "Build {{ $labels.build }} is taking too long"
+      description: "Build {{ $labels.build }} in namespace {{ $labels.namespace }} has been running for more than 30 minutes."

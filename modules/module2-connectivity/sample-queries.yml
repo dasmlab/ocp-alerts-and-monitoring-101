@@ -1,0 +1,188 @@
+# Sample Prometheus Queries for OCP Cluster Monitoring
+# Use these queries to validate your setup and explore available metrics
+
+# =============================================================================
+# CLUSTER HEALTH QUERIES
+# =============================================================================
+
+cluster_health:
+  - name: "Total Nodes"
+    description: "Count of all nodes in the cluster"
+    query: "count(kube_node_status_condition{condition=\"Ready\",status=\"true\"})"
+    
+  - name: "Ready Nodes"
+    description: "Nodes that are in Ready state"
+    query: "kube_node_status_condition{condition=\"Ready\",status=\"true\"}"
+    
+  - name: "Not Ready Nodes"
+    description: "Nodes that are not in Ready state"
+    query: "kube_node_status_condition{condition=\"Ready\",status=\"false\"}"
+    
+  - name: "Node Conditions"
+    description: "All node conditions with their status"
+    query: "kube_node_status_condition"
+
+# =============================================================================
+# POD STATUS QUERIES
+# =============================================================================
+
+pod_status:
+  - name: "Pods by Phase"
+    description: "Count of pods grouped by their current phase"
+    query: "count by (phase) (kube_pod_status_phase)"
+    
+  - name: "Failed Pods"
+    description: "Pods in Failed state"
+    query: "kube_pod_status_phase{phase=\"Failed\"}"
+    
+  - name: "Pending Pods"
+    description: "Pods in Pending state"
+    query: "kube_pod_status_phase{phase=\"Pending\"}"
+    
+  - name: "Running Pods"
+    description: "Pods in Running state"
+    query: "kube_pod_status_phase{phase=\"Running\"}"
+    
+  - name: "Pods by Namespace"
+    description: "Count of pods grouped by namespace"
+    query: "count by (namespace) (kube_pod_status_phase)"
+
+# =============================================================================
+# RESOURCE UTILIZATION QUERIES
+# =============================================================================
+
+resource_usage:
+  - name: "Node CPU Usage Percentage"
+    description: "CPU usage percentage per node"
+    query: "100 - (avg by (instance) (rate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100)"
+    
+  - name: "Node Memory Usage Percentage"
+    description: "Memory usage percentage per node"
+    query: "100 - ((node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) * 100)"
+    
+  - name: "Top CPU Consuming Containers"
+    description: "Top 10 containers by CPU usage"
+    query: "topk(10, rate(container_cpu_usage_seconds_total[5m]))"
+    
+  - name: "Top Memory Consuming Containers"
+    description: "Top 10 containers by memory usage"
+    query: "topk(10, container_memory_usage_bytes)"
+    
+  - name: "Container CPU Usage Rate"
+    description: "CPU usage rate for all containers"
+    query: "rate(container_cpu_usage_seconds_total[5m])"
+    
+  - name: "Container Memory Usage"
+    description: "Memory usage for all containers"
+    query: "container_memory_usage_bytes"
+
+# =============================================================================
+# DEPLOYMENT AND WORKLOAD QUERIES
+# =============================================================================
+
+workload_status:
+  - name: "Deployment Replicas"
+    description: "Current vs desired replicas for deployments"
+    query: "kube_deployment_status_replicas"
+    
+  - name: "StatefulSet Replicas"
+    description: "Current vs desired replicas for statefulsets"
+    query: "kube_statefulset_status_replicas"
+    
+  - name: "DaemonSet Ready Replicas"
+    description: "Number of ready replicas for daemonsets"
+    query: "kube_daemonset_status_number_ready"
+    
+  - name: "Deployment Status"
+    description: "Deployment status conditions"
+    query: "kube_deployment_status_condition"
+
+# =============================================================================
+# APPLICATION METRICS QUERIES
+# =============================================================================
+
+application_metrics:
+  - name: "HTTP Request Rate"
+    description: "HTTP requests per second (if available)"
+    query: "rate(http_requests_total[5m])"
+    
+  - name: "HTTP Error Rate"
+    description: "HTTP 5xx error rate (if available)"
+    query: "rate(http_requests_total{status=~\"5..\"}[5m])"
+    
+  - name: "HTTP Response Time"
+    description: "Average HTTP response time (if available)"
+    query: "rate(http_request_duration_seconds_sum[5m]) / rate(http_request_duration_seconds_count[5m])"
+    
+  - name: "Go Goroutines"
+    description: "Number of Go goroutines (if available)"
+    query: "go_goroutines"
+    
+  - name: "Go Memory Usage"
+    description: "Go memory allocation (if available)"
+    query: "go_memstats_alloc_bytes"
+    
+  - name: "Process CPU Usage"
+    description: "Process CPU usage (if available)"
+    query: "rate(process_cpu_seconds_total[5m])"
+    
+  - name: "Process Memory Usage"
+    description: "Process memory usage (if available)"
+    query: "process_resident_memory_bytes"
+
+# =============================================================================
+# OPENSHIFT-SPECIFIC QUERIES
+# =============================================================================
+
+openshift_metrics:
+  - name: "Route Availability"
+    description: "Route availability status (if available)"
+    query: "route_availability"
+    
+  - name: "Route Response Time"
+    description: "Route response time (if available)"
+    query: "route_response_time_seconds"
+    
+  - name: "Build Status"
+    description: "OpenShift build status (if available)"
+    query: "openshift_build_status"
+    
+  - name: "Build Duration"
+    description: "OpenShift build duration (if available)"
+    query: "openshift_build_duration_seconds"
+
+# =============================================================================
+# CONNECTIVITY AND TARGET QUERIES
+# =============================================================================
+
+connectivity:
+  - name: "All Targets Status"
+    description: "Status of all scraping targets"
+    query: "up"
+    
+  - name: "OCP Targets Status"
+    description: "Status of OCP-specific targets"
+    query: "up{job=~\"ocp-cluster.*\"}"
+    
+  - name: "Target Health by Job"
+    description: "Target health grouped by job"
+    query: "count by (job) (up)"
+
+# =============================================================================
+# USAGE EXAMPLES
+# =============================================================================
+
+# Example 1: Check if any nodes are not ready
+# Query: kube_node_status_condition{condition="Ready",status="false"}
+
+# Example 2: Find pods that have been pending for more than 5 minutes
+# Query: kube_pod_status_phase{phase="Pending"} * on(pod, namespace) group_left() (time() - kube_pod_created > 300)
+
+# Example 3: Calculate memory usage percentage for a specific namespace
+# Query: (sum by (namespace) (container_memory_usage_bytes{namespace="your-namespace"}) / sum by (namespace) (kube_node_status_allocatable{resource="memory"})) * 100
+
+# Example 4: Find deployments with mismatched replicas
+# Query: kube_deployment_status_replicas_available != kube_deployment_spec_replicas
+
+# Example 5: Check for high CPU usage nodes
+# Query: 100 - (avg by (instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 80

@@ -1,0 +1,370 @@
+# Example ServiceMonitor Configurations for OCP
+# These ServiceMonitors demonstrate how to monitor different types of applications
+
+# =============================================================================
+# BASIC APPLICATION MONITORING
+# =============================================================================
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: web-app-monitor
+  namespace: production
+  labels:
+    app: web-app
+    team: frontend
+spec:
+  selector:
+    matchLabels:
+      app: web-app
+      monitoring: enabled
+  endpoints:
+  - port: metrics
+    interval: 30s
+    path: /metrics
+    scheme: http
+    scrapeTimeout: 10s
+
+---
+# =============================================================================
+# ADVANCED APPLICATION MONITORING WITH MULTIPLE ENDPOINTS
+# =============================================================================
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: api-service-monitor
+  namespace: production
+  labels:
+    app: api-service
+    team: backend
+spec:
+  selector:
+    matchLabels:
+      app: api-service
+      monitoring: enabled
+  endpoints:
+  - port: metrics
+    interval: 15s
+    path: /metrics
+    scheme: https
+    tlsConfig:
+      insecureSkipVerify: true
+    scrapeTimeout: 10s
+  - port: health
+    interval: 60s
+    path: /health
+    scheme: http
+    scrapeTimeout: 5s
+  - port: debug
+    interval: 300s
+    path: /debug/pprof
+    scheme: http
+    scrapeTimeout: 10s
+
+---
+# =============================================================================
+# DATABASE MONITORING WITH AUTHENTICATION
+# =============================================================================
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: postgres-monitor
+  namespace: database
+  labels:
+    app: postgres
+    team: database
+spec:
+  selector:
+    matchLabels:
+      app: postgres
+      monitoring: enabled
+  endpoints:
+  - port: metrics
+    interval: 30s
+    path: /metrics
+    scheme: http
+    basicAuth:
+      name: postgres-monitor-auth
+      key: password
+    scrapeTimeout: 10s
+
+---
+# =============================================================================
+# REDIS MONITORING
+# =============================================================================
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: redis-monitor
+  namespace: cache
+  labels:
+    app: redis
+    team: backend
+spec:
+  selector:
+    matchLabels:
+      app: redis
+      monitoring: enabled
+  endpoints:
+  - port: metrics
+    interval: 30s
+    path: /metrics
+    scheme: http
+    scrapeTimeout: 10s
+
+---
+# =============================================================================
+# NGINX INGRESS CONTROLLER MONITORING
+# =============================================================================
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: nginx-ingress-monitor
+  namespace: openshift-ingress
+  labels:
+    app: nginx-ingress
+    team: platform
+spec:
+  selector:
+    matchLabels:
+      app: nginx-ingress
+      monitoring: enabled
+  endpoints:
+  - port: metrics
+    interval: 30s
+    path: /metrics
+    scheme: http
+    scrapeTimeout: 10s
+
+---
+# =============================================================================
+# ELASTICSEARCH MONITORING
+# =============================================================================
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: elasticsearch-monitor
+  namespace: logging
+  labels:
+    app: elasticsearch
+    team: platform
+spec:
+  selector:
+    matchLabels:
+      app: elasticsearch
+      monitoring: enabled
+  endpoints:
+  - port: metrics
+    interval: 30s
+    path: /_prometheus/metrics
+    scheme: http
+    scrapeTimeout: 10s
+
+---
+# =============================================================================
+# KAFKA MONITORING
+# =============================================================================
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: kafka-monitor
+  namespace: messaging
+  labels:
+    app: kafka
+    team: backend
+spec:
+  selector:
+    matchLabels:
+      app: kafka
+      monitoring: enabled
+  endpoints:
+  - port: metrics
+    interval: 30s
+    path: /metrics
+    scheme: http
+    scrapeTimeout: 10s
+
+---
+# =============================================================================
+# CUSTOM APPLICATION WITH RELABELING
+# =============================================================================
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: custom-app-monitor
+  namespace: production
+  labels:
+    app: custom-app
+    team: backend
+spec:
+  selector:
+    matchLabels:
+      app: custom-app
+      monitoring: enabled
+  endpoints:
+  - port: metrics
+    interval: 30s
+    path: /metrics
+    scheme: http
+    scrapeTimeout: 10s
+    relabelings:
+    - sourceLabels: [__meta_kubernetes_pod_name]
+      targetLabel: pod_name
+    - sourceLabels: [__meta_kubernetes_namespace]
+      targetLabel: namespace
+    - sourceLabels: [__meta_kubernetes_service_name]
+      targetLabel: service_name
+    metricRelabelings:
+    - sourceLabels: [__name__]
+      regex: 'custom_.*'
+      targetLabel: __name__
+      replacement: 'app_${1}'
+
+---
+# =============================================================================
+# MULTI-PORT APPLICATION MONITORING
+# =============================================================================
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: multi-port-app-monitor
+  namespace: production
+  labels:
+    app: multi-port-app
+    team: backend
+spec:
+  selector:
+    matchLabels:
+      app: multi-port-app
+      monitoring: enabled
+  endpoints:
+  - port: http-metrics
+    interval: 30s
+    path: /metrics
+    scheme: http
+    scrapeTimeout: 10s
+  - port: grpc-metrics
+    interval: 30s
+    path: /grpc_metrics
+    scheme: http
+    scrapeTimeout: 10s
+  - port: custom-metrics
+    interval: 60s
+    path: /custom_metrics
+    scheme: http
+    scrapeTimeout: 15s
+
+---
+# =============================================================================
+# EXTERNAL SERVICE MONITORING
+# =============================================================================
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: external-service-monitor
+  namespace: monitoring
+  labels:
+    app: external-service
+    team: platform
+spec:
+  selector:
+    matchLabels:
+      app: external-service
+      monitoring: enabled
+  endpoints:
+  - port: metrics
+    interval: 60s
+    path: /metrics
+    scheme: https
+    tlsConfig:
+      insecureSkipVerify: true
+    scrapeTimeout: 30s
+    honorLabels: true
+    honorTimestamps: true
+
+---
+# =============================================================================
+# NAMESPACE-SCOPED MONITORING
+# =============================================================================
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: namespace-scoped-monitor
+  namespace: production
+  labels:
+    app: namespace-scoped
+    team: backend
+spec:
+  selector:
+    matchLabels:
+      app: namespace-scoped
+      monitoring: enabled
+  namespaceSelector:
+    matchNames:
+    - production
+    - staging
+  endpoints:
+  - port: metrics
+    interval: 30s
+    path: /metrics
+    scheme: http
+    scrapeTimeout: 10s
+
+---
+# =============================================================================
+# SAMPLE SERVICE DEFINITIONS (for reference)
+# =============================================================================
+# These are example Service definitions that would be used with the ServiceMonitors above
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: web-app-service
+  namespace: production
+  labels:
+    app: web-app
+    monitoring: enabled
+spec:
+  selector:
+    app: web-app
+  ports:
+  - name: metrics
+    port: 8080
+    targetPort: 8080
+    protocol: TCP
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: api-service-service
+  namespace: production
+  labels:
+    app: api-service
+    monitoring: enabled
+spec:
+  selector:
+    app: api-service
+  ports:
+  - name: metrics
+    port: 9090
+    targetPort: 9090
+    protocol: TCP
+  - name: health
+    port: 8080
+    targetPort: 8080
+    protocol: TCP
+  - name: debug
+    port: 6060
+    targetPort: 6060
+    protocol: TCP
+
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: postgres-monitor-auth
+  namespace: database
+type: Opaque
+data:
+  password: cG9zdGdyZXNfcGFzc3dvcmQ=  # base64 encoded password

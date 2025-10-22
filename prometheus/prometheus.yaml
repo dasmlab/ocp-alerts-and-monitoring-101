@@ -1,0 +1,111 @@
+# Prometheus Configuration for OCP Cluster Scraping
+# Copy this file to your Prometheus configuration directory (normally /etc/prometheus/prometheus.yaml)
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: 'ocp-cluster'
+    environment: 'production'
+
+# Alertmanager configuration
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+          # Configure your AlertManager targets here
+          # - alertmanager:9093
+
+# Load rules once and periodically evaluate them according to the global 'evaluation_interval'.
+rule_files:
+  # - "first_rules.yml"
+  # - "second_rules.yml"
+  # Add your custom alert rules here
+
+# A scrape configuration containing exactly one endpoint to scrape:
+scrape_configs:
+  # OCP Cluster Monitoring via Thanos Querier (Federation)
+  - job_name: 'ocp-cluster-federation'
+    bearer_token_file: '/etc/prometheus/secrets/ocp-federate.token'
+    scheme: https
+    tls_config:
+      insecure_skip_verify: true
+    static_configs:
+      - targets: 
+        # Replace with your OCP cluster's Thanos Querier endpoint
+        # You can get this with: oc -n openshift-monitoring get route thanos-querier -o jsonpath='{.spec.host}'
+        - 'thanos-querier.openshift-monitoring.svc.cluster.local:9091'
+    metrics_path: '/federate'
+    params:
+      'match[]':
+        - '{__name__=~".+"}'  # Federate all metrics
+    scrape_interval: 30s
+    scrape_timeout: 10s
+
+  # OCP Cluster Monitoring via Thanos Querier (Direct Query)
+  - job_name: 'ocp-cluster-direct'
+    bearer_token_file: '/etc/prometheus/secrets/ocp-federate.token'
+    scheme: https
+    tls_config:
+      insecure_skip_verify: true
+    static_configs:
+      - targets: 
+        - 'thanos-querier.openshift-monitoring.svc.cluster.local:9091'
+    metrics_path: '/api/v1/query'
+    params:
+      query: ['up']  # Basic connectivity test
+    scrape_interval: 60s
+    scrape_timeout: 10s
+
+  # OCP Cluster Monitoring - Core Metrics
+  - job_name: 'ocp-cluster-core'
+    bearer_token_file: '/etc/prometheus/secrets/ocp-federate.token'
+    scheme: https
+    tls_config:
+      insecure_skip_verify: true
+    static_configs:
+      - targets: 
+        - 'thanos-querier.openshift-monitoring.svc.cluster.local:9091'
+    metrics_path: '/federate'
+    params:
+      'match[]':
+        # Core cluster metrics
+        - 'up{job=~"apiserver|etcd|kubelet|kube-proxy|kube-state-metrics|node-exporter"}'
+        - 'kube_node_status_condition'
+        - 'kube_pod_status_phase'
+        - 'kube_deployment_status_replicas'
+        - 'kube_statefulset_status_replicas'
+        - 'kube_daemonset_status_number_ready'
+        - 'container_memory_usage_bytes'
+        - 'container_cpu_usage_seconds_total'
+        - 'node_memory_MemAvailable_bytes'
+        - 'node_cpu_seconds_total'
+    scrape_interval: 30s
+    scrape_timeout: 10s
+
+  # OCP Cluster Monitoring - Application Metrics
+  - job_name: 'ocp-cluster-apps'
+    bearer_token_file: '/etc/prometheus/secrets/ocp-federate.token'
+    scheme: https
+    tls_config:
+      insecure_skip_verify: true
+    static_configs:
+      - targets: 
+        - 'thanos-querier.openshift-monitoring.svc.cluster.local:9091'
+    metrics_path: '/federate'
+    params:
+      'match[]':
+        # Application-specific metrics
+        - 'http_requests_total'
+        - 'http_request_duration_seconds'
+        - 'go_memstats_alloc_bytes'
+        - 'go_goroutines'
+        - 'process_cpu_seconds_total'
+        - 'process_resident_memory_bytes'
+    scrape_interval: 30s
+    scrape_timeout: 10s
+
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
