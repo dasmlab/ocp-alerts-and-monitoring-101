@@ -16,6 +16,7 @@ metadata:
   namespace: demo-app
   labels:
     app: demo-app
+    openshift.io/user-monitoring: "true"
 spec:
   selector:
     matchLabels:

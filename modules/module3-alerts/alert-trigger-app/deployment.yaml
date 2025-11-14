@@ -19,8 +19,8 @@ spec:
     spec:
       containers:
       - name: alert-trigger-app
-        image: alert-trigger-app:latest
-        imagePullPolicy: IfNotPresent
+        image: ghcr.io/dasmlab/alert-trigger-app:latest
+        imagePullPolicy: Always
         ports:
         - name: http
           containerPort: 8080
@@ -65,6 +65,7 @@ metadata:
   namespace: demo-app
   labels:
     app: alert-trigger-app
+    openshift.io/user-monitoring: "true"
 spec:
   selector:
     matchLabels:
@@ -86,6 +87,7 @@ metadata:
   labels:
     prometheus: user-workload
     role: alert-rules
+    openshift.io/user-monitoring: "true"
 spec:
   groups:
   - name: alert.trigger.demo

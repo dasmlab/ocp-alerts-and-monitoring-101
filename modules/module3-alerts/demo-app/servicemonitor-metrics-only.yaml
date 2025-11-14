@@ -1,0 +1,22 @@
+# ServiceMonitor with /metrics endpoint only (for Prometheus scraping)
+# The /health endpoint returns JSON which Prometheus cannot parse
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: demo-app-monitor
+  namespace: demo-app
+  labels:
+    app: demo-app
+    openshift.io/user-monitoring: "true"
+spec:
+  selector:
+    matchLabels:
+      app: demo-app
+      monitoring: enabled
+  endpoints:
+  - port: http
+    interval: 30s
+    path: /metrics
+    scheme: http
+    scrapeTimeout: 10s
+

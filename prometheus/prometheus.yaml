@@ -121,6 +121,7 @@ scrape_configs:
         - '{__name__=~"ALERTS|ALERTS_FOR_STATE"}'
         - '{job!~"prometheus.*|thanos.*"}'
         - '{namespace!~"openshift-.*"}'
+        - '{__name__=~"demo_app.*"}'
     static_configs:
       - targets: ['user-workload-federate-openshift-user-workload-monitoring.apps.ocp-ai-sno.rh.dasmlab.org']
 
