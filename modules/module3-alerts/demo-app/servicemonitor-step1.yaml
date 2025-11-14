@@ -1,0 +1,12 @@
+# Step 1: No ServiceMonitor
+# At this stage, the pod will come up and show "I'm not started yet" on the webpage
+# This demonstrates that we can reach the POD but it's not happy yet
+# 
+# To demonstrate:
+# 1. Deploy the app: oc apply -f deployment.yaml
+# 2. Port-forward to the service: oc port-forward -n demo-app svc/demo-app 8080:8080
+# 3. Open http://localhost:8080/ - you should see "I'm not started yet"
+# 4. Check that Prometheus is NOT scraping this app yet (no ServiceMonitor)
+
+# No ServiceMonitor exists at this step
+

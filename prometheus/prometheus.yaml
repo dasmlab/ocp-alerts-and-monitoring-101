@@ -40,7 +40,7 @@ scrape_configs:
       'match[]':
         - '{__name__=~".+"}'  # Federate all metrics
     scrape_interval: 30s
-    scrape_timeout: 10s
+    scrape_timeout: 30s  # Increased timeout to prevent context deadline exceeded
 
   # OCP Cluster Monitoring via Thanos Querier (Direct Query)
   - job_name: 'ocp-cluster-direct'
@@ -55,7 +55,7 @@ scrape_configs:
     params:
       query: ['up']  # Basic connectivity test
     scrape_interval: 60s
-    scrape_timeout: 10s
+    scrape_timeout: 30s  # Increased timeout to prevent context deadline exceeded
 
   # OCP Cluster Monitoring - Core Metrics
   - job_name: 'ocp-cluster-core'
@@ -81,7 +81,7 @@ scrape_configs:
         - 'node_memory_MemAvailable_bytes'
         - 'node_cpu_seconds_total'
     scrape_interval: 30s
-    scrape_timeout: 10s
+    scrape_timeout: 30s  # Increased timeout to prevent context deadline exceeded
 
   # OCP Cluster Monitoring - Application Metrics
   - job_name: 'ocp-cluster-apps'
@@ -103,7 +103,7 @@ scrape_configs:
         - 'process_cpu_seconds_total'
         - 'process_resident_memory_bytes'
     scrape_interval: 30s
-    scrape_timeout: 10s
+    scrape_timeout: 30s  # Increased timeout to prevent context deadline exceeded
 
   # ----------------------------
   # 2. User Workload Metrics (UWM)

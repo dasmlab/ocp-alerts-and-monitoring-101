@@ -1,0 +1,92 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: my-app
+  labels:
+    openshift.io/user-monitoring: "true"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cpu-burner
+  namespace: my-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cpu-burner
+  template:
+    metadata:
+      labels:
+        app: cpu-burner
+    spec:
+      containers:
+      - name: cpu-burner
+        image: busybox
+        command: ["sh", "-c", "while true; do :; done"]
+        resources:
+          requests:
+            cpu: 10m
+          limits:
+            cpu: "2000m"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: metrics-demo
+  namespace: my-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: metrics-demo
+  template:
+    metadata:
+      labels:
+        app: metrics-demo
+    spec:
+      containers:
+      - name: prometheus-example-app
+        image: quay.io/brancz/prometheus-example-app:v0.3.0
+        ports:
+        - name: http
+          containerPort: 8080
+        resources:
+          requests:
+            cpu: 5m
+            memory: 32Mi
+          limits:
+            cpu: 200m
+            memory: 64Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: metrics-demo
+  namespace: my-app
+  labels:
+    app: metrics-demo
+spec:
+  selector:
+    app: metrics-demo
+  ports:
+  - name: http
+    port: 8080
+    targetPort: http
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: metrics-demo
+  namespace: my-app
+spec:
+  selector:
+    matchLabels:
+      app: metrics-demo
+  namespaceSelector:
+    matchNames: ["my-app"]
+  endpoints:
+  - port: http
+    path: /metrics
+    interval: 15s
+

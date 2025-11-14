@@ -1,0 +1,33 @@
+# Step 3: ServiceMonitor with both /metrics and /health endpoints (Best Practice)
+# This demonstrates the recommended approach: monitoring both health and metrics
+#
+# To demonstrate:
+# 1. Apply this ServiceMonitor: oc apply -f servicemonitor-step3.yaml
+# 2. Check Prometheus targets - you should see both endpoints being scraped
+# 3. Query metrics: demo_app_ready, demo_app_uptime_seconds, etc.
+# 4. This matches best practice: monitor both health checks and metrics
+
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: demo-app-monitor
+  namespace: demo-app
+  labels:
+    app: demo-app
+spec:
+  selector:
+    matchLabels:
+      app: demo-app
+      monitoring: enabled
+  endpoints:
+  - port: http
+    interval: 30s
+    path: /metrics
+    scheme: http
+    scrapeTimeout: 10s
+  - port: http
+    interval: 60s
+    path: /health
+    scheme: http
+    scrapeTimeout: 5s
+

@@ -1,0 +1,270 @@
+# AlertManager Custom Resource for OpenShift
+# This example demonstrates how to configure AlertManager routing to Slack, Webhook, and Email
+#
+# In OpenShift, AlertManager is configured using the Alertmanager CRD (not alertmanager.yml)
+# The configuration is provided as a Secret that contains the alertmanager.yml content
+#
+# Prerequisites:
+# - AlertManager operator must be installed
+# - You need to create a Secret with the alertmanager configuration
+# - Then reference that Secret in the Alertmanager CR
+
+---
+# Step 1: Create a Secret containing the AlertManager configuration
+# This Secret contains the alertmanager.yml configuration
+apiVersion: v1
+kind: Secret
+metadata:
+  name: alertmanager-main
+  namespace: openshift-monitoring
+type: Opaque
+stringData:
+  alertmanager.yaml: |
+    global:
+      # SMTP configuration for email notifications
+      smtp_smarthost: 'smtp.example.com:587'
+      smtp_from: 'alerts@example.com'
+      smtp_auth_username: 'alerts@example.com'
+      smtp_auth_password: 'your-smtp-password'
+      smtp_require_tls: true
+    
+      # Slack configuration (can also be per-receiver)
+      slack_api_url: 'https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK'
+    
+    # Route configuration defines how alerts are routed to receivers
+    route:
+      # Group alerts by these labels
+      group_by: ['alertname', 'cluster', 'service']
+      
+      # Wait time before sending first notification for a new group
+      group_wait: 10s
+      
+      # Wait time before sending notification about new alerts in a group
+      group_interval: 10s
+      
+      # Minimum time between two notifications for the same group
+      repeat_interval: 12h
+      
+      # Default receiver (used if no route matches)
+      receiver: 'default-receiver'
+      
+      # Child routes for more specific routing
+      routes:
+      # Route critical alerts to critical-alerts receiver
+      - match:
+          severity: critical
+        receiver: 'critical-alerts'
+        continue: false  # Don't continue to parent route
+        
+      # Route warning alerts to warning-alerts receiver
+      - match:
+          severity: warning
+        receiver: 'warning-alerts'
+        continue: false
+        
+      # Route application alerts to slack
+      - match:
+          component: application
+        receiver: 'slack-receiver'
+        continue: false
+        
+      # Route platform alerts to email
+      - match:
+          team: platform
+        receiver: 'email-receiver'
+        continue: false
+    
+    # Inhibition rules prevent certain alerts from firing if other alerts are active
+    inhibit_rules:
+    - source_match:
+        severity: 'critical'
+      target_match:
+        severity: 'warning'
+      equal: ['alertname', 'instance']
+    
+    # Receivers define where alerts are sent
+    receivers:
+    # Default receiver - sends to webhook
+    - name: 'default-receiver'
+      webhook_configs:
+      - url: 'http://webhook-receiver.example.com:5001/alerts'
+        http_config:
+          bearer_token: 'your-bearer-token'
+        send_resolved: true
+    
+    # Critical alerts receiver - sends to email, Slack, and webhook
+    - name: 'critical-alerts'
+      email_configs:
+      - to: 'oncall@example.com'
+        headers:
+          Subject: 'CRITICAL: {{ .GroupLabels.alertname }}'
+        html: |
+          <h2>Critical Alert</h2>
+          <p><strong>Alert:</strong> {{ .GroupLabels.alertname }}</p>
+          <p><strong>Severity:</strong> {{ .GroupLabels.severity }}</p>
+          <p><strong>Summary:</strong> {{ range .Alerts }}{{ .Annotations.summary }}{{ end }}</p>
+          <p><strong>Description:</strong> {{ range .Alerts }}{{ .Annotations.description }}{{ end }}</p>
+          <p><strong>Labels:</strong></p>
+          <ul>
+            {{ range .GroupLabels.SortedPairs }}
+            <li><strong>{{ .Name }}:</strong> {{ .Value }}</li>
+            {{ end }}
+          </ul>
+        send_resolved: true
+      
+      slack_configs:
+      - api_url: 'https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK'
+        channel: '#critical-alerts'
+        title: '🚨 CRITICAL: {{ .GroupLabels.alertname }}'
+        text: |
+          *Alert:* {{ .GroupLabels.alertname }}
+          *Severity:* {{ .GroupLabels.severity }}
+          {{ range .Alerts }}
+          *Summary:* {{ .Annotations.summary }}
+          *Description:* {{ .Annotations.description }}
+          {{ end }}
+        send_resolved: true
+        color: 'danger'
+      
+      webhook_configs:
+      - url: 'http://critical-webhook.example.com:5001/alerts'
+        send_resolved: true
+    
+    # Warning alerts receiver - sends to Slack
+    - name: 'warning-alerts'
+      slack_configs:
+      - api_url: 'https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK'
+        channel: '#alerts'
+        title: '⚠️ WARNING: {{ .GroupLabels.alertname }}'
+        text: |
+          *Alert:* {{ .GroupLabels.alertname }}
+          {{ range .Alerts }}
+          *Summary:* {{ .Annotations.summary }}
+          *Description:* {{ .Annotations.description }}
+          {{ end }}
+        send_resolved: true
+        color: 'warning'
+    
+    # Slack-only receiver for application alerts
+    - name: 'slack-receiver'
+      slack_configs:
+      - api_url: 'https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK'
+        channel: '#application-alerts'
+        title: '📊 Application Alert: {{ .GroupLabels.alertname }}'
+        text: |
+          *Application Alert*
+          *Alert:* {{ .GroupLabels.alertname }}
+          {{ range .Alerts }}
+          *Summary:* {{ .Annotations.summary }}
+          *Description:* {{ .Annotations.description }}
+          {{ end }}
+        send_resolved: true
+        color: 'good'
+    
+    # Email-only receiver for platform alerts
+    - name: 'email-receiver'
+      email_configs:
+      - to: 'platform-team@example.com'
+        headers:
+          Subject: 'Platform Alert: {{ .GroupLabels.alertname }}'
+        html: |
+          <h2>Platform Alert</h2>
+          <p><strong>Alert:</strong> {{ .GroupLabels.alertname }}</p>
+          <p><strong>Summary:</strong> {{ range .Alerts }}{{ .Annotations.summary }}{{ end }}</p>
+          <p><strong>Description:</strong> {{ range .Alerts }}{{ .Annotations.description }}{{ end }}</p>
+        send_resolved: true
+
+---
+# Step 2: Create the Alertmanager Custom Resource
+# This CR references the Secret created above
+apiVersion: monitoring.coreos.com/v1
+kind: Alertmanager
+metadata:
+  name: main
+  namespace: openshift-monitoring
+spec:
+  # Reference to the Secret containing alertmanager.yaml
+  configSecret: alertmanager-main
+  
+  # Number of AlertManager replicas (for HA)
+  replicas: 3
+  
+  # Resource limits
+  resources:
+    requests:
+      memory: "200Mi"
+      cpu: "100m"
+    limits:
+      memory: "1Gi"
+      cpu: "500m"
+  
+  # Storage configuration
+  storage:
+    volumeClaimTemplate:
+      spec:
+        storageClassName: gp3
+        resources:
+          requests:
+            storage: 10Gi
+
+---
+# Step 3: Example PrometheusRule that will trigger alerts
+# These alerts will be routed according to the AlertManager configuration above
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: demo-alerts-for-routing
+  namespace: openshift-monitoring
+  labels:
+    prometheus: k8s
+    role: alert-rules
+spec:
+  groups:
+  - name: demo.routing.rules
+    rules:
+    # Critical alert - will go to critical-alerts receiver (email + Slack + webhook)
+    - alert: CriticalNodeDown
+      expr: kube_node_status_condition{condition="Ready",status="false"} == 1
+      for: 5m
+      labels:
+        severity: critical
+        component: node
+        team: platform
+      annotations:
+        summary: "Critical: Node {{ $labels.node }} is down"
+        description: "Node {{ $labels.node }} has been down for more than 5 minutes"
+    
+    # Warning alert - will go to warning-alerts receiver (Slack only)
+    - alert: HighCPUUsage
+      expr: rate(container_cpu_usage_seconds_total[5m]) * 100 > 80
+      for: 10m
+      labels:
+        severity: warning
+        component: cpu
+      annotations:
+        summary: "High CPU usage detected"
+        description: "Container {{ $labels.container }} has CPU usage above 80%"
+    
+    # Application alert - will go to slack-receiver (Slack only)
+    - alert: ApplicationErrorRate
+      expr: rate(http_requests_total{status=~"5.."}[5m]) / rate(http_requests_total[5m]) * 100 > 5
+      for: 5m
+      labels:
+        severity: warning
+        component: application
+      annotations:
+        summary: "High error rate for application"
+        description: "Error rate is above 5% for more than 5 minutes"
+    
+    # Platform alert - will go to email-receiver (Email only)
+    - alert: PlatformResourceExhausted
+      expr: (container_memory_usage_bytes / container_spec_memory_limit_bytes) * 100 > 90
+      for: 5m
+      labels:
+        severity: warning
+        component: memory
+        team: platform
+      annotations:
+        summary: "Platform resource exhausted"
+        description: "Memory usage is above 90%"
+

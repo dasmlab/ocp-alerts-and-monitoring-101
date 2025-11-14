@@ -379,9 +379,131 @@ groups:
 
 ## Alert Routing and Notifications
 
-### AlertManager Configuration
+### AlertManager Configuration in OpenShift
 
-Configure AlertManager to route alerts to appropriate channels:
+In OpenShift, AlertManager is configured using the **Alertmanager Custom Resource (CR)**. The configuration is provided as a Secret that contains the `alertmanager.yaml` content, which is then referenced by the Alertmanager CR.
+
+#### Method 1: Using Alertmanager CRD (Recommended for OpenShift)
+
+This is the recommended approach for OpenShift clusters:
+
+**Step 1: Create a Secret with AlertManager configuration**
+
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: alertmanager-main
+  namespace: openshift-monitoring
+type: Opaque
+stringData:
+  alertmanager.yaml: |
+    global:
+      # SMTP configuration for email notifications
+      smtp_smarthost: 'smtp.example.com:587'
+      smtp_from: 'alerts@example.com'
+      smtp_auth_username: 'alerts@example.com'
+      smtp_auth_password: 'your-smtp-password'
+      smtp_require_tls: true
+    
+    route:
+      group_by: ['alertname', 'cluster', 'service']
+      group_wait: 10s
+      group_interval: 10s
+      repeat_interval: 12h
+      receiver: 'default-receiver'
+      routes:
+      - match:
+          severity: critical
+        receiver: 'critical-alerts'
+      - match:
+          severity: warning
+        receiver: 'warning-alerts'
+    
+    receivers:
+    # Default receiver - Webhook
+    - name: 'default-receiver'
+      webhook_configs:
+      - url: 'http://webhook-receiver.example.com:5001/alerts'
+        send_resolved: true
+    
+    # Critical alerts - Email, Slack, and Webhook
+    - name: 'critical-alerts'
+      email_configs:
+      - to: 'oncall@example.com'
+        subject: 'CRITICAL: {{ .GroupLabels.alertname }}'
+        html: |
+          <h2>Critical Alert</h2>
+          <p><strong>Alert:</strong> {{ .GroupLabels.alertname }}</p>
+          <p><strong>Summary:</strong> {{ range .Alerts }}{{ .Annotations.summary }}{{ end }}</p>
+          <p><strong>Description:</strong> {{ range .Alerts }}{{ .Annotations.description }}{{ end }}</p>
+        send_resolved: true
+      
+      slack_configs:
+      - api_url: 'https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK'
+        channel: '#critical-alerts'
+        title: '🚨 CRITICAL: {{ .GroupLabels.alertname }}'
+        text: |
+          *Alert:* {{ .GroupLabels.alertname }}
+          {{ range .Alerts }}
+          *Summary:* {{ .Annotations.summary }}
+          *Description:* {{ .Annotations.description }}
+          {{ end }}
+        send_resolved: true
+        color: 'danger'
+      
+      webhook_configs:
+      - url: 'http://critical-webhook.example.com:5001/alerts'
+        send_resolved: true
+    
+    # Warning alerts - Slack
+    - name: 'warning-alerts'
+      slack_configs:
+      - api_url: 'https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK'
+        channel: '#alerts'
+        title: '⚠️ WARNING: {{ .GroupLabels.alertname }}'
+        text: |
+          *Alert:* {{ .GroupLabels.alertname }}
+          {{ range .Alerts }}
+          *Summary:* {{ .Annotations.summary }}
+          *Description:* {{ .Annotations.description }}
+          {{ end }}
+        send_resolved: true
+        color: 'warning'
+```
+
+**Step 2: Create the Alertmanager Custom Resource**
+
+```yaml
+apiVersion: monitoring.coreos.com/v1
+kind: Alertmanager
+metadata:
+  name: main
+  namespace: openshift-monitoring
+spec:
+  # Reference to the Secret containing alertmanager.yaml
+  configSecret: alertmanager-main
+  
+  # Number of AlertManager replicas (for HA)
+  replicas: 3
+  
+  # Resource limits
+  resources:
+    requests:
+      memory: "200Mi"
+      cpu: "100m"
+    limits:
+      memory: "1Gi"
+      cpu: "500m"
+```
+
+**Complete examples are available in:**
+- `example-alertmanager-cr.yaml` - Comprehensive example with all three receiver types
+- `example-alertmanager-cr-simple.yaml` - Simplified example focusing on the basics
+
+#### Method 2: Traditional alertmanager.yml (For External Prometheus)
+
+If you're using an external Prometheus instance (not OCP's built-in monitoring), you can configure AlertManager using the traditional `alertmanager.yml` file:
 
 ```yaml
 # alertmanager.yml
@@ -424,6 +546,43 @@ receivers:
     channel: '#alerts'
     title: 'Warning Alert'
     text: '{{ range .Alerts }}{{ .Annotations.summary }}{{ end }}'
+```
+
+### Receiver Types
+
+AlertManager supports multiple receiver types for routing alerts:
+
+1. **Email** (`email_configs`): Send alerts via SMTP
+2. **Slack** (`slack_configs`): Send alerts to Slack channels
+3. **Webhook** (`webhook_configs`): Send alerts to HTTP endpoints
+4. **PagerDuty** (`pagerduty_configs`): Send alerts to PagerDuty
+5. **OpsGenie** (`opsgenie_configs`): Send alerts to OpsGenie
+6. **WeChat** (`wechat_configs`): Send alerts to WeChat
+7. **VictorOps** (`victorops_configs`): Send alerts to VictorOps
+
+### Routing Rules
+
+Routing rules allow you to:
+- **Match alerts** by labels (e.g., `severity: critical`)
+- **Route to different receivers** based on alert characteristics
+- **Group alerts** to reduce notification noise
+- **Set timing** for notification intervals
+
+### Example: Three-Tier Routing
+
+```yaml
+route:
+  receiver: 'default'
+  routes:
+  - match:
+      severity: critical
+    receiver: 'critical'  # Email + Slack + Webhook
+  - match:
+      severity: warning
+    receiver: 'warning'   # Slack only
+  - match:
+      severity: info
+    receiver: 'info'      # Webhook only
 ```
 
 ## Testing Your Alerts

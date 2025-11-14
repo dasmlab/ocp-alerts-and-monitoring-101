@@ -1,0 +1,30 @@
+# Step 2: ServiceMonitor with /health endpoint only
+# This shows that we don't get to the webpage until /health is "ok"
+# The readiness probe will wait for /health to return 200 before marking pod as ready
+#
+# To demonstrate:
+# 1. Apply this ServiceMonitor: oc apply -f servicemonitor-step2.yaml
+# 2. Wait for the app to become ready (60 seconds after pod start)
+# 3. Check Prometheus targets - you should see the demo-app target
+# 4. The webpage will now show "Application is ready and running!" once /health returns 200
+# 5. Note: We're only monitoring /health at this point
+
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: demo-app-monitor
+  namespace: demo-app
+  labels:
+    app: demo-app
+spec:
+  selector:
+    matchLabels:
+      app: demo-app
+      monitoring: enabled
+  endpoints:
+  - port: http
+    interval: 30s
+    path: /health
+    scheme: http
+    scrapeTimeout: 10s
+
